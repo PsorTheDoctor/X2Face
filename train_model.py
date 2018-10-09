@@ -42,9 +42,9 @@ parser.add_argument('--use_discriminator', type=bool, default=False)
 parser.add_argument('--use_uncertainty', type=bool, default=False)
 parser.add_argument('--use_face_mask', type=bool, default=False)
 parser.add_argument('--use_animal', type=str, default=None)
-parser.add_argument('--seed', type=int, default=1)   
+parser.add_argument('--seed', type=int, default=1)
 
-opt = parser.parse_args() 
+opt = parser.parse_args()
 stn_args = parser
 stn_args.add_argument('--grid_size', type = int, default = 20)
 stn_args.add_argument('--span_range', type = int, default = 0.99)
@@ -87,7 +87,7 @@ if opt.use_uncertainty:
 else:
 	num_outputs = 2
 model = UnwrappedFaceWeightedAverage(output_num_channels=num_outputs, input_num_channels=num_inputs,inner_nc=opt.inner_nc)
-	
+
 if opt.copy_weights:
 	checkpoint_file = torch.load(opt.old_model)
 	model.load_state_dict(checkpoint_file['state_dict'])
@@ -115,14 +115,14 @@ optimizer = optim.SGD(parameters, lr=opt.lr, momentum=0.9)
 def run_batch(imgs, requires_grad=False, volatile=False, other_images=None):
 	for i in range(0, len(imgs)):
 		imgs[i] = Variable(imgs[i], requires_grad=requires_grad, volatile=volatile).cuda()
-		
+
 	poses = imgs[-3]
 	print('Poses', poses.size())
 
 	if not other_images is None:
 		for i in range(0, len(other_images)):
 			other_images[i] = Variable(other_images[i], requires_grad=requires_grad, volatile=volatile).cuda()
-			
+
 		return (model(poses, *imgs[0:-3]), model(poses, *other_images[0:-3])), imgs + [poses], other_images[0:-3]
 
 	return model(poses, *imgs[0:-3]), imgs + [poses]
@@ -140,9 +140,9 @@ if not os.path.exists(folder):
 
 def train(epoch, num_views):
 	train_set = VoxCeleb(num_views, epoch, 1, additional_face=(opt.use_content_other_face or opt.use_discriminator))
-	
+
 	training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize, shuffle=True)
-        
+
         epoch_train_loss = 0
 	photometricloss = 0
 	contentloss = 0
@@ -155,7 +155,7 @@ def train(epoch, num_views):
 		exprloss_noweight = 0
 	else:
 		eyemouthloss = 0
-	
+
 	l_discriminator = 0
 	l_discriminator_identity = 0
 
@@ -217,7 +217,7 @@ def train(epoch, num_views):
 					torchvision.utils.save_image(input[:,1:2,:,:].data.cpu(), '%s/img%d_%d_dim%d.png' % (folder, iteration, i, 2))
 				elif input.size(1) > 3:
 					torchvision.utils.save_image(input.sum(1, keepdim=True).data.cpu(), '%s/img%d_%d_sum.png' % (folder, iteration, i, ))
-				
+
 				else:
 					torchvision.utils.save_image(input.data.cpu(), '%s/img%d_%d.png' % (folder, iteration, i))
 				#t_inputs = inputs[i].clone()
@@ -226,7 +226,7 @@ def train(epoch, num_views):
 			torchvision.utils.save_image(inputs[opt.num_views-1].data.cpu(), '%s/gt_%d.png' % (folder, iteration))
 
 		lossc = criterion(result, inputs[opt.num_views-1])
-				
+
 		loss = lossc
 		photometricloss = photometricloss + lossc.data[0]
 
@@ -237,7 +237,7 @@ def train(epoch, num_views):
 		optimizer.step()
 		loss_mean = epoch_train_loss / iteration
 		del batch
-                
+
 		if opt.use_expression_content_loss:
 			print("===> Train Epoch[{}]({}/{}): Loss: {:.4f}; Expression: {:.4f}; \
 				Photometric: {:.4f}; Content: {:.4f}; Content Other: {:.4f}; \n D: {:.4f}; D_ID: {:.4f}".format(epoch, iteration,
@@ -258,7 +258,7 @@ def train(epoch, num_views):
 			      contentloss_other_noweight / float(iteration),
 			      l_discriminator / float(iteration),
 			      l_discriminator_identity / float(iteration)))
-		
+
 		if iteration == 2000:
 			break
 	model.stats['photometric_error'] = np.vstack([model.stats['photometric_error'], photometricloss / iteration]);
@@ -283,7 +283,7 @@ def train(epoch, num_views):
 
 def val(epoch, num_views):
 	val_set = VoxCeleb(num_views, 0, 2, additional_face=(opt.use_content_other_face or opt.use_discriminator))
-	
+
 	validation_data_loader = DataLoader(dataset=val_set, num_workers=opt.threads, batch_size=opt.batchSize, shuffle=False)
 
 	model.eval()
@@ -293,13 +293,13 @@ def val(epoch, num_views):
 	contentloss_noweight = 0
 	contentloss_other = 0
 	contentloss_other_noweight = 0
-        
+
 	if opt.use_expression_content_loss:
 		exprloss = 0
 		exprloss_noweight = 0
 	else:
 		eyemouthloss = 0
-	
+
 	for iteration, batch in enumerate(validation_data_loader, 1):
 
 		if opt.use_uncertainty:
@@ -310,13 +310,13 @@ def val(epoch, num_views):
 			result, inputs = run_batch(batch[0][0], False, volatile=True)
 
 		lossc = criterion(result, inputs[opt.num_views-1])
-				
+
 		loss = lossc
 		photometricloss = photometricloss + lossc.data[0]
-		
+
 		epoch_val_loss += loss.data[0]
 		loss_mean = epoch_val_loss / iteration
-		
+
 		if opt.use_expression_content_loss:
 			print("===> Val Epoch[{}]({}/{}): Loss: {:.4f}; Expression: {:.4f}; Photometric: {:.4f}; Content: {:.4f}; Content Other: {:.4f};".format(epoch, iteration,
 			      len(validation_data_loader), loss_mean,
@@ -333,7 +333,7 @@ def val(epoch, num_views):
 			      contentloss_other_noweight / float(iteration)))
 		# if iteration == 2000:
 		# 	break
-	
+
 	model.val_stats['photometric_error'] = np.vstack([model.val_stats['photometric_error'], photometricloss / iteration])
 	if opt.use_expression_content_loss:
 		model.val_stats['expression_error'] = np.vstack([model.val_stats['expression_error'], exprloss_noweight / iteration])
@@ -357,7 +357,7 @@ def checkpoint(model, epoch):
 		dict['opitmizer_D'] = opitmizer_D.state_dict()
 		dict['state_dict_D_identity'] = discriminator_identity.state_dict()
 		dict['opitmizer_D_identity'] = opitmizer_D_identity.state_dict()
-		
+
 	model_out_path = "{}model_epoch_{}.pth".format(opt.model_epoch_path, epoch)
 
 	if not(os.path.exists(opt.model_epoch_path)):
@@ -368,9 +368,9 @@ def checkpoint(model, epoch):
 	# Check if new best one:
 	if len(model.val_stats['photometric_error']) > 0 and (model.val_stats['photometric_error'].argmin() == ((model.val_stats['photometric_error'].size) - 1)):
 		shutil.copyfile(model_out_path, "{}model_epoch_{}.pth".format(opt.model_epoch_path, 'best'))
-	
+
 	# remove all previous ones with a worse validation loss
-	for i in range(0, epoch-1):	
+	for i in range(0, epoch-1):
 		#if model.val_stats['loss'][i] >=  model.val_stats['loss'][epoch-1] and \
 		if os.path.exists("{}model_epoch_{}.pth".format(opt.model_epoch_path, i)):
 			os.remove( "{}model_epoch_{}.pth".format(opt.model_epoch_path, i))
@@ -393,7 +393,7 @@ for epoch in range(start_epoch, 3000):
 		checkpoint_file = torch.load("{}model_epoch_{}.pth".format(opt.model_epoch_path, epoch-1))
 		model.load_state_dict(checkpoint_file['state_dict'])
 		optimizer.load_state_dict(checkpoint_file['optimizer'])
-	
+
 	#lossd = train(epoch, opt.num_views)
 	with torch.no_grad():
 		loss = val(epoch, opt.num_views)

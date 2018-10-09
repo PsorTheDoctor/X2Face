@@ -1,4 +1,4 @@
-# Pix2Pix : https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/models/networks.py
+#  Pix2Pix : https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/models/networks.py
 
 import torch
 import torch.nn as nn
@@ -10,46 +10,6 @@ import numpy as np
 ###############################################################################
 # Functions
 ###############################################################################
-
-# Defines the GAN loss which uses either LSGAN or the regular GAN.
-# When LSGAN is used, it is basically same as MSELoss,
-# but it abstracts away the need to create the target label tensor
-# that has the same size as the input
-class GANLoss(nn.Module):
-    def __init__(self, use_lsgan=True, target_real_label=1.0, target_fake_label=0.0,
-                 tensor=torch.FloatTensor):
-        super(GANLoss, self).__init__()
-        self.real_label = target_real_label
-        self.fake_label = target_fake_label
-        self.real_label_var = None
-        self.fake_label_var = None
-        self.Tensor = tensor
-        if use_lsgan:
-            self.loss = nn.MSELoss()
-        else:
-            self.loss = nn.BCELoss()
-
-    def get_target_tensor(self, input, target_is_real):
-        target_tensor = None
-        if target_is_real:
-            create_label = ((self.real_label_var is None) or
-                            (self.real_label_var.numel() != input.numel()))
-            if create_label:
-                real_tensor = self.Tensor(input.size()).fill_(self.real_label)
-                self.real_label_var = Variable(real_tensor, requires_grad=False)
-            target_tensor = self.real_label_var
-        else:
-            create_label = ((self.fake_label_var is None) or
-                            (self.fake_label_var.numel() != input.numel()))
-            if create_label:
-                fake_tensor = self.Tensor(input.size()).fill_(self.fake_label)
-                self.fake_label_var = Variable(fake_tensor, requires_grad=False)
-            target_tensor = self.fake_label_var
-        return target_tensor
-
-    def __call__(self, input, target_is_real):
-        target_tensor = self.get_target_tensor(input, target_is_real)
-        return self.loss(input, target_tensor)
 
 
 
@@ -142,7 +102,7 @@ def get_scheduler(optimizer, opt):
     return scheduler
 
 
-def define_G(input_nc, output_nc, ngf, which_model_netG, norm='batch', use_dropout=False, init_type='normal', gpu_ids=[]):
+def define_G(input_nc, output_nc, ngf, which_model_netG, norm='batch', use_dropout=False, init_type='normal', gpu_ids=[], inner_nc=512):
     netG = None
     use_gpu = len(gpu_ids) > 0
     norm_layer = get_norm_layer(norm_type=norm)
@@ -154,10 +114,12 @@ def define_G(input_nc, output_nc, ngf, which_model_netG, norm='batch', use_dropo
         netG = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=9, gpu_ids=gpu_ids)
     elif which_model_netG == 'resnet_6blocks':
         netG = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=6, gpu_ids=gpu_ids)
+    elif which_model_netG == 'unet_64':
+        netG = UnetGeneratorBetterUpsampler(input_nc, output_nc, 6, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids)
     elif which_model_netG == 'unet_128':
         netG = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids)
     elif which_model_netG == 'unet_256':
-        netG = UnetGeneratorBetterUpsampler(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids)
+        netG = UnetGeneratorBetterUpsampler(input_nc, output_nc, 8, ngf, inner_nc=inner_nc, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % which_model_netG)
     if len(gpu_ids) > 0:
@@ -176,37 +138,16 @@ def print_network(net):
 
 # Defines the SkipNetWork
 class Pix2PixModel(nn.Module):
-	def __init__(self, output_nc, input_nc=3):
-		super(Pix2PixModel, self).__init__()
+    def __init__(self, input_nc, output_nc, inner_nc=512, arch='unet_64'):
+        super(Pix2PixModel, self).__init__()
 
-		self.netG = define_G(input_nc, output_nc, 64, 'unet_256', 'batch', False, 'xavier', [0])
+        self.netG = define_G(input_nc, output_nc, 64, arch, 'batch', False, 'xavier', [0], inner_nc=inner_nc)
 
-	def forward(self, *cycles):
-		# First one
-		xc = self.netG(cycles[0], *cycles[1:])
-		return xc
+    def forward(self, *cycles):
+        # First one
+        xc = self.netG(cycles[0], *cycles[1:])
+        return xc
 
-def define_D(input_nc, ndf, which_model_netD,
-             n_layers_D=3, norm='batch', use_sigmoid=False, init_type='normal', gpu_ids=[]):
-    netD = None
-    use_gpu = len(gpu_ids) > 0
-    norm_layer = get_norm_layer(norm_type=norm)
-
-    if use_gpu:
-        assert(torch.cuda.is_available())
-    if which_model_netD == 'basic':
-        netD = NLayerDiscriminator(input_nc, ndf, n_layers=3, norm_layer=norm_layer, use_sigmoid=use_sigmoid, gpu_ids=gpu_ids)
-    elif which_model_netD == 'n_layers':
-        netD = NLayerDiscriminator(input_nc, ndf, n_layers_D, norm_layer=norm_layer, use_sigmoid=use_sigmoid, gpu_ids=gpu_ids)
-    elif which_model_netD == 'pixel':
-        netD = PixelDiscriminator(input_nc, ndf, norm_layer=norm_layer, use_sigmoid=use_sigmoid, gpu_ids=gpu_ids)
-    else:
-        raise NotImplementedError('Discriminator model name [%s] is not recognized' %
-                                  which_model_netD)
-    
-    
-    init_weights(netD, init_type=init_type)
-    return netD
 
 
 # Defines the Unet generator.
@@ -242,13 +183,13 @@ class UnetGenerator(nn.Module):
 # if |num_downs| == 7, image of size 128x128 will become of size 1x1
 # at the bottleneck
 class UnetGeneratorBetterUpsampler(nn.Module):
-    def __init__(self, input_nc, output_nc, num_downs, ngf=64,
+    def __init__(self, input_nc, output_nc, num_downs, ngf=64, inner_nc=512,
                  norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[]):
         super(UnetGeneratorBetterUpsampler, self).__init__()
         self.gpu_ids = gpu_ids
 
         # construct unet structure
-        unet_block = UnetSkipConnectionBlockBetterUpsampler(ngf * 8, ngf * 8, input_nc=None, submodule=None, norm_layer=norm_layer, innermost=True)
+        unet_block = UnetSkipConnectionBlockBetterUpsampler(ngf * 8, inner_nc, input_nc=None, submodule=None, norm_layer=norm_layer, innermost=True)
         for i in range(num_downs - 5):
             unet_block = UnetSkipConnectionBlockBetterUpsampler(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer, use_dropout=use_dropout)
         unet_block = UnetSkipConnectionBlockBetterUpsampler(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
@@ -290,11 +231,11 @@ class UnetSkipConnectionBlockBetterUpsampler(nn.Module):
 
         if outermost:
             upsample = nn.Upsample(scale_factor=2, mode='bilinear')
-            upconv = nn.Conv2d(inner_nc * 2, outer_nc,
+            upconv = nn.Conv2d(inner_nc, outer_nc,
                                         kernel_size=3, stride=1,
                                         padding=1, bias=use_bias)
             down = [downconv]
-            up = [uprelu, upsample, upconv]
+            up = [uprelu, upsample, upconv, nn.Tanh()]
             self.up = nn.Sequential(*up)
             self.down = nn.Sequential(*down)
         elif innermost:
@@ -308,7 +249,7 @@ class UnetSkipConnectionBlockBetterUpsampler(nn.Module):
             self.down = nn.Sequential(*down)
         else:
             upsample = nn.Upsample(scale_factor=2, mode='bilinear')
-            upconv = nn.Conv2d(inner_nc * 2, outer_nc,
+            upconv = nn.Conv2d(inner_nc, outer_nc,
                                         kernel_size=3, stride=1,
                                         padding=1, bias=use_bias)
             down = [downrelu, downconv, downnorm]
@@ -321,15 +262,11 @@ class UnetSkipConnectionBlockBetterUpsampler(nn.Module):
 
 
     def forward(self, x_orig):
-        # Assuming that the first set of units are viewpoint; the rest are 3D
-        # Then we can concat (max / sum / whatever these parts)
-        # And the rest is only the viewpoint
         x_fv = self.down(x_orig)
 
         if self.innermost:
             x = self.up(x_fv)
-            return torch.cat([x, x_orig], 1), x_fv
-
+            return x, x_fv
         if self.outermost:
             x, x_fv = self.submodule(x_fv)
             x = self.up(x)
@@ -341,7 +278,7 @@ class UnetSkipConnectionBlockBetterUpsampler(nn.Module):
             else:
                 x = self.up(x)
 
-            return torch.cat([x,  x_orig], 1), x_fv
+            return x, x_fv
 
 
 
