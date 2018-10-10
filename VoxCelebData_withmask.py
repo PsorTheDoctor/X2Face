@@ -45,6 +45,7 @@ from imageio import mimread
 
 import numpy as np
 from torch.utils.data import Dataset
+from itertools import permutations
 
 
 class VideoToTensor(object):
@@ -110,7 +111,8 @@ class AllAugmentationTransform:
 
 class FramesDataset(Dataset):
     """Dataset of videos, represented as image of consequent frames"""
-    def __init__(self, root_dir, image_shape=(64, 64, 3), is_train=True, random_seed=0, classes_list=None):
+    def __init__(self, root_dir, augmentation_param, image_shape=(64, 64, 3), is_train=True,
+                 random_seed=0, classes_list=None):
         self.root_dir = root_dir
         self.images = os.listdir(root_dir)
         self.image_shape = tuple(image_shape)
@@ -122,12 +124,16 @@ class FramesDataset(Dataset):
         test_images = os.listdir(os.path.join(root_dir, 'test'))
         self.root_dir = os.path.join(self.root_dir, 'train' if is_train else 'test')
 
+
         if is_train:
             self.images = train_images
         else:
             self.images = test_images
 
-        self.transform = AllAugmentationTransform()
+        if is_train:
+            self.transform = AllAugmentationTransform(**augmentation_param)
+        else:
+            self.transform = VideoToTensor()
 
     def __len__(self):
         return len(self.images)
@@ -165,3 +171,51 @@ class FramesDataset(Dataset):
         out['name'] = os.path.basename(img_name)
 
         return out
+
+
+class PairedDataset(Dataset):
+    """
+    Dataset of pairs.
+    """
+    def __init__(self, initial_dataset, number_of_pairs, seed=0):
+        self.initial_dataset = initial_dataset
+        classes_list = self.initial_dataset.classes_list
+
+        if classes_list is None:
+            max_idx = min(number_of_pairs, len(initial_dataset))
+            nx, ny = max_idx, max_idx
+            xy = np.mgrid[:nx,:ny].reshape(2, -1).T
+        else:
+            images = self.initial_dataset.images
+            name_to_index = {name:index for index, name in enumerate(images)}
+            classes = pd.read_csv(classes_list)
+            classes = classes[classes['name'].isin(images)]
+            names = classes['name']
+            labels = classes['cls']
+
+            name_pairs = []
+            for cls in np.unique(labels):
+                name_pairs += list(permutations(names[labels == cls], 2))
+
+            xy = []
+            for first, second in name_pairs:
+                xy.append((name_to_index[first], name_to_index[second]))
+
+            xy = np.array(xy)
+
+        number_of_pairs = min(xy.shape[0], number_of_pairs)
+        np.random.seed(seed)
+        self.pairs = xy.take(np.random.choice(xy.shape[0], number_of_pairs, replace=False), axis=0)
+
+    def __len__(self):
+        return len(self.pairs)
+
+    def __getitem__(self, idx):
+        pair = self.pairs[idx]
+        first = self.initial_dataset[pair[0]]
+        second = self.initial_dataset[pair[1]]
+
+        first = {'first_' + key: value for key, value in first.items()}
+        second = {'second_' + key: value for key, value in second.items()}
+
+        return {**first, **second}
