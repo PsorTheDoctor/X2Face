@@ -7,11 +7,12 @@ import imageio
 import argparse
 from VoxCelebData_withmask import FramesDataset, PairedDataset
 from UnwrappedFace import UnwrappedFaceWeightedAverage
+from torch.autograd import Variable
 
-
-def reconstruction(generator, checkpoint, log_dir, dataset, format='.gif', number_of_pairs=100):
-    log_dir = os.path.join(log_dir, 'reconstruction')
-
+def transfer(generator, checkpoint, log_dir, dataset, format='.gif', number_of_pairs=100):
+    log_dir = os.path.join(log_dir, 'transfer')
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
     checkpoint = torch.load(checkpoint)
     generator.load_state_dict(checkpoint)
 
@@ -21,22 +22,20 @@ def reconstruction(generator, checkpoint, log_dir, dataset, format='.gif', numbe
 
     generator.eval()
     for it, x in tqdm(enumerate(dataloader)):
-        with torch.no_grad():
-            imgs = x['first_video_array']
-            apperance = x['second_video_array'][:, :, :1, :, :]
+        imgs = Variable(x['first_video_array'], volatile=True).cuda()
+        apperance = Variable(x['second_video_array'][:, 0, :, :, :], volatile=True).cuda()
 
-            results = []
-            for i in range(imgs.size()[1]):
-                result = generator(apperance, i)
-                results.append(result.unsqueeze(dim=1))
+        results = []
+        for i in range(imgs.size()[1]):
+            result = generator(imgs[:, i], apperance)
+            results.append(result.unsqueeze(dim=1))
 
-            results = torch.cat(results, dim=1)
-
-            results = results.data.cpu().numpy()
-            results = results[0].transpose((0, 2, 3, 1))
-
-            img_name = "-".join([x['first_name'][0], x['second_name'][0]]) + format['format']
-            imageio.mimsave(os.path.join(log_dir, img_name), results)
+        results = torch.cat(results, dim=1)
+        results = results.data.cpu().numpy()
+        results = results[0].transpose((0, 2, 3, 1))
+        results = (results * 255).astype('uint8')        
+        img_name = "-".join([x['first_name'][0], x['second_name'][0]]) + format
+        imageio.mimsave(os.path.join(log_dir, img_name), results)
 
 
 if __name__ == "__main__":
@@ -52,4 +51,4 @@ if __name__ == "__main__":
     model = model.cuda()
 
     dataset = FramesDataset(args.dataset, is_train=False)
-    reconstruction(model, os.path.join(args.folder, 'model.cpk'), args.folder, dataset, args.format)
+    transfer(model, os.path.join(args.folder, 'model.cpk'), args.folder, dataset, args.format)

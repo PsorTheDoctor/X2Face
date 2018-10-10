@@ -111,7 +111,7 @@ class AllAugmentationTransform:
 
 class FramesDataset(Dataset):
     """Dataset of videos, represented as image of consequent frames"""
-    def __init__(self, root_dir, augmentation_param, image_shape=(64, 64, 3), is_train=True,
+    def __init__(self, root_dir, image_shape=(64, 64, 3), is_train=True,
                  random_seed=0, classes_list=None):
         self.root_dir = root_dir
         self.images = os.listdir(root_dir)
@@ -131,7 +131,7 @@ class FramesDataset(Dataset):
             self.images = test_images
 
         if is_train:
-            self.transform = AllAugmentationTransform(**augmentation_param)
+            self.transform = AllAugmentationTransform()
         else:
             self.transform = VideoToTensor()
 

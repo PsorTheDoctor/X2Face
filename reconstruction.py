@@ -7,7 +7,7 @@ import imageio
 import argparse
 from VoxCelebData_withmask import FramesDataset
 from UnwrappedFace import UnwrappedFaceWeightedAverage
-
+from torch.autograd import Variable
 
 def reconstruction_loss(a, b):
     return torch.abs(a - b).mean()
@@ -26,21 +26,19 @@ def reconstruction(generator, checkpoint, log_dir, dataset, format='.gif'):
     loss_list = []
     generator.eval()
     for it, x in tqdm(enumerate(dataloader)):
-        with torch.no_grad():
-            imgs = x['video_array']
-            apperance = x['video_array'][:, 0]
+        imgs = Variable(x['video_array'], volatile=True).cuda()
+        apperance = imgs[:, 0]
+        results = []
+        for i in range(imgs.size()[1]):
+            result = generator(imgs[:, i], apperance)
+            results.append(result.unsqueeze(dim=1))
 
-            results = []
-            for i in range(imgs.size()[1]):
-                result = generator(apperance, i)
-                results.append(result.unsqueeze(dim=1))
+        results = torch.cat(results, dim=1)
+        loss_list.append(reconstruction_loss(imgs, results).data.cpu().numpy())
 
-            results = torch.cat(results, dim=1)
-            loss_list.append(reconstruction_loss(imgs, results))
-
-            results = results.data.cpu().numpy()
-            results = results[0].transpose((0, 2, 3, 1))
-            imageio.mimsave(os.path.join(log_dir, x['name'] + format), results)
+        results = (results.data.cpu().numpy() * 255).astype('uint8')
+        results = results[0].transpose((0, 2, 3, 1))
+        imageio.mimsave(os.path.join(log_dir, x['name'][0] + format), results)
 
     print ("Reconstruction loss: %s" % np.mean(loss_list))
 
