@@ -63,7 +63,7 @@ class SelectRandomFrames(object):
     the range of degrees, will be (-degrees, +degrees).
     """
 
-    def __init__(self, reflect_pad_time=True, consequent=True,):
+    def __init__(self, reflect_pad_time=True, consequent=False):
         self.reflect_pad_time = reflect_pad_time
         self.consequent = consequent
         self.number_of_frames = 2

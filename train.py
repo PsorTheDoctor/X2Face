@@ -23,7 +23,7 @@ parser.add_argument('--batchSize', type=int, default=16, help='Batch Size')
 parser.add_argument("--dataset", default='data/nemo', help="Path to dataset")
 parser.add_argument("--folder", default="out", help="out folder")
 parser.add_argument("--arch", default='unet_64', help="Network architecture")
-parser.add_argument("--num_iter", default=100000, type=int, help="Number of iterations")
+parser.add_argument("--num_iter", default=10000, type=int, help="Number of iterations")
 
 args = parser.parse_args()
 
@@ -68,8 +68,9 @@ for j in trange(args.num_iter):
     optimizer.zero_grad()
 
     if j % 100 == 0:
+        torchvision.utils.save_image(imgs[:, 1].data.cpu(), '%s/inp_%d.png' % (args.folder, j))        
         torchvision.utils.save_image(result.data.cpu(), '%s/result_%d.png' % (args.folder, j))
         torchvision.utils.save_image(imgs[:, 0].data.cpu(), '%s/gt_%d.png' % (args.folder, j))
 
+torch.save(model.state_dict(), os.path.join(args.folder, "model.cpk"))
 
-torch.save(os.path.join(args.folder, "model.cpk"), model.state_dict())
