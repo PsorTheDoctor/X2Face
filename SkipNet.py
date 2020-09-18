@@ -61,7 +61,10 @@ def weights_init_normal(m):
     elif classname.find('Linear') != -1:
         init.uniform(m.weight.data, 0.0, 0.02)
     elif classname.find('BatchNorm2d') != -1:
-        init.uniform(m.weight.data, 1.0, 0.02)
+	#
+	# 1.0 -> 0.0
+	#
+        init.uniform(m.weight.data, 0.0, 0.02)
         init.constant(m.bias.data, 0.0)
 
 
